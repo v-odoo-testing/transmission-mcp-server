@@ -113,14 +113,33 @@ class TransmissionClient:
         result = self._make_request("torrent-get", {"fields": fields})
         return result.get("arguments", {}).get("torrents", [])
     
-    def add_torrent(self, magnet_or_url: str, download_dir: Optional[str] = None) -> Dict[str, Any]:
+    def add_torrent(self, magnet_or_url: str, download_dir: Optional[str] = None, start_torrent: bool = True) -> Dict[str, Any]:
         """Add torrent via magnet link or URL"""
         args = {"filename": magnet_or_url}
         if download_dir:
             args["download-dir"] = download_dir
+        if not start_torrent:
+            args["paused"] = True
         
         result = self._make_request("torrent-add", args)
         return result.get("arguments", {})
+    
+    def get_torrent_details(self, torrent_id: int) -> Dict[str, Any]:
+        """Get detailed information about a specific torrent"""
+        fields = [
+            "id", "hashString", "name", "status", "downloadDir",
+            "percentDone", "totalSize", "downloadedEver", "rateDownload",
+            "rateUpload", "eta", "files", "peers", "addedDate", "startDate"
+        ]
+        result = self._make_request("torrent-get", {"ids": [torrent_id], "fields": fields})
+        torrents = result.get("arguments", {}).get("torrents", [])
+        return torrents[0] if torrents else {}
+    
+    def search_torrents(self, search_term: str) -> List[Dict[str, Any]]:
+        """Search torrents by name"""
+        all_torrents = self.list_torrents()
+        search_term_lower = search_term.lower()
+        return [t for t in all_torrents if search_term_lower in t.get("name", "").lower()]
     
     def start_torrent(self, torrent_ids: List[int]) -> None:
         """Start torrents"""
@@ -210,12 +229,52 @@ async def list_tools() -> List[Tool]:
                         "type": "string", 
                         "description": "Optional download directory path"
                     },
+                    "start_torrent": {
+                        "type": "boolean",
+                        "description": "Start torrent immediately after adding (default: true)"
+                    },
                     "use_socks5": {
                         "type": "boolean",
                         "description": "Use SOCKS5 proxy for this request (default: false)"
                     }
                 },
                 "required": ["magnet_or_url"]
+            }
+        ),
+        Tool(
+            name="search_torrents",
+            description="Search torrents by name",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "search_term": {
+                        "type": "string",
+                        "description": "Search term to find torrents"
+                    },
+                    "use_socks5": {
+                        "type": "boolean",
+                        "description": "Use SOCKS5 proxy for this request (default: false)"
+                    }
+                },
+                "required": ["search_term"]
+            }
+        ),
+        Tool(
+            name="get_torrent_details",
+            description="Get detailed information about a specific torrent",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "torrent_id": {
+                        "type": "integer",
+                        "description": "Torrent ID to get details for"
+                    },
+                    "use_socks5": {
+                        "type": "boolean",
+                        "description": "Use SOCKS5 proxy for this request (default: false)"
+                    }
+                },
+                "required": ["torrent_id"]
             }
         ),
         Tool(
@@ -308,14 +367,16 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         elif name == "add_torrent":
             magnet_or_url = arguments["magnet_or_url"]
             download_dir = arguments.get("download_dir")
+            start_torrent = arguments.get("start_torrent", True)
             
-            result = client.add_torrent(magnet_or_url, download_dir)
+            result = client.add_torrent(magnet_or_url, download_dir, start_torrent)
             
             if "torrent-added" in result:
                 torrent = result["torrent-added"]
+                status_text = "and started downloading" if start_torrent else "but not started (paused)"
                 return [TextContent(
                     type="text",
-                    text=f"Torrent added successfully ({proxy_status})!\nID: {torrent.get('id')}\nName: {torrent.get('name')}"
+                    text=f"Torrent added successfully {status_text} ({proxy_status})!\nID: {torrent.get('id')}\nName: {torrent.get('name')}"
                 )]
             elif "torrent-duplicate" in result:
                 torrent = result["torrent-duplicate"]
@@ -325,6 +386,65 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 )]
             else:
                 return [TextContent(type="text", text=f"Torrent add result unclear ({proxy_status})")]
+        
+        elif name == "search_torrents":
+            search_term = arguments["search_term"]
+            torrents = client.search_torrents(search_term)
+            
+            if not torrents:
+                return [TextContent(type="text", text=f"No torrents found matching '{search_term}' ({proxy_status})")]
+            
+            output = f"Found {len(torrents)} torrent(s) matching '{search_term}' ({proxy_status}):\n"
+            for torrent in torrents:
+                status_map = {0: "stopped", 1: "check-wait", 2: "check", 3: "download-wait", 
+                            4: "download", 5: "seed-wait", 6: "seed", 7: "isolated"}
+                status = status_map.get(torrent.get("status", 0), "unknown")
+                progress = torrent.get("percentDone", 0) * 100
+                
+                output += f"ID: {torrent.get('id')}\n"
+                output += f"Name: {torrent.get('name')}\n"
+                output += f"Status: {status}\n"
+                output += f"Progress: {progress:.1f}%\n"
+                output += "---\n"
+            
+            return [TextContent(type="text", text=output)]
+        
+        elif name == "get_torrent_details":
+            torrent_id = arguments["torrent_id"]
+            torrent = client.get_torrent_details(torrent_id)
+            
+            if not torrent:
+                return [TextContent(type="text", text=f"Torrent ID {torrent_id} not found ({proxy_status})")]
+            
+            status_map = {0: "stopped", 1: "check-wait", 2: "check", 3: "download-wait", 
+                        4: "download", 5: "seed-wait", 6: "seed", 7: "isolated"}
+            status = status_map.get(torrent.get("status", 0), "unknown")
+            progress = torrent.get("percentDone", 0) * 100
+            download_speed = torrent.get("rateDownload", 0) / (1024 * 1024)  # MB/s
+            upload_speed = torrent.get("rateUpload", 0) / (1024 * 1024)  # MB/s
+            total_size = torrent.get("totalSize", 0) / (1024 * 1024 * 1024)  # GB
+            eta = torrent.get("eta", -1)
+            
+            output = f"Torrent Details ({proxy_status}):\n"
+            output += f"ID: {torrent.get('id')}\n"
+            output += f"Name: {torrent.get('name')}\n"
+            output += f"Status: {status}\n"
+            output += f"Progress: {progress:.1f}%\n"
+            output += f"Size: {total_size:.2f} GB\n"
+            output += f"Download Speed: {download_speed:.2f} MB/s\n"
+            output += f"Upload Speed: {upload_speed:.2f} MB/s\n"
+            output += f"Download Dir: {torrent.get('downloadDir')}\n"
+            
+            if eta > 0:
+                eta_hours = eta // 3600
+                eta_mins = (eta % 3600) // 60
+                output += f"ETA: {eta_hours}h {eta_mins}m\n"
+            elif eta == -1:
+                output += "ETA: Not available\n"
+            elif eta == -2:
+                output += "ETA: Unknown\n"
+            
+            return [TextContent(type="text", text=output)]
         
         elif name == "control_torrent":
             action = arguments["action"]

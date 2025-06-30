@@ -94,3 +94,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Runtime connection switching without restart
 - More intuitive usage: "Use SOCKS5 to add torrent..." 
 - Better error messages showing connection method used
+
+### Added
+- **search_torrents** tool: Search torrents by name instead of using external Python scripts
+- **get_torrent_details** tool: Get detailed information about specific torrents by ID
+- **Auto-start option**: add_torrent now has `start_torrent` parameter (default: true)
+  - Set `start_torrent: false` to add without starting
+  - Default behavior starts torrents immediately after adding
+
+### Improved
+- Enhanced add_torrent tool with better control over torrent startup
+- Eliminated need for external Python scripts for common operations
+- Better status reporting with download speeds, sizes, and ETAs
+- More comprehensive torrent information display
+
+### Fixed
+- No longer need to execute Python code for searching torrents
+- No longer need to execute Python code for getting torrent details
+- Cleaner separation between MCP tools and implementation
