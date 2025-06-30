@@ -13,20 +13,6 @@
         "SOCKS5_PORT": "1080",
         "TRANSMISSION_TIMEOUT": "30"
       }
-    },
-    "transmission-socks5": {
-      "command": "/Users/dgoo2308/git/transmission-mcp-server/venv/bin/python", 
-      "args": ["/Users/dgoo2308/git/transmission-mcp-server/src/server.py"],
-      "env": {
-        "TRANSMISSION_HOST": "192.168.1.205",
-        "TRANSMISSION_PORT": "9091", 
-        "TRANSMISSION_USERNAME": "your_username",
-        "TRANSMISSION_PASSWORD": "your_password",
-        "USE_SOCKS5": "true",
-        "SOCKS5_HOST": "127.0.0.1",
-        "SOCKS5_PORT": "1080",
-        "TRANSMISSION_TIMEOUT": "30"
-      }
     }
   }
 }

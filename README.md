@@ -9,7 +9,7 @@ A simple MCP server for controlling your Transmission torrent daemon. Supports b
    git clone <this-repo>
    cd transmission-mcp-server
    python3 -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   source venv/bin/activate
    pip install -r requirements.txt
    ```
 
@@ -17,13 +17,10 @@ A simple MCP server for controlling your Transmission torrent daemon. Supports b
    
    Copy the configuration from `claude-desktop-config.json` to your Claude Desktop config file:
    
-   - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-   - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+   **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
    
    **Important**: Update the paths to match your system and use the venv Python:
-   
-   - **macOS/Linux**: `/path/to/transmission-mcp-server/venv/bin/python`
-   - **Windows**: `C:\path\to\transmission-mcp-server\venv\Scripts\python.exe`
+   `/path/to/transmission-mcp-server/venv/bin/python`
    ```json
    {
      "mcpServers": {
@@ -43,7 +40,7 @@ A simple MCP server for controlling your Transmission torrent daemon. Supports b
    ```
 
 3. **For SOCKS5 proxy usage** (when away from home):
-   Use the `transmission-socks5` server config with `"USE_SOCKS5": "true"`
+   Use the `use_socks5: true` parameter in your commands to Claude
 
 ## Environment Variables
 
@@ -58,37 +55,47 @@ A simple MCP server for controlling your Transmission torrent daemon. Supports b
 
 ## Available Tools
 
-### `get_session_info`
-Get information about the Transmission daemon session, including version, settings, and statistics.
-
-### `list_torrents`  
-List all torrents with their status, progress, and download directories.
-
 ### `add_torrent`
 Add a new torrent via magnet link or URL.
 - `magnet_or_url`: Magnet link or torrent file URL
 - `download_dir`: Optional custom download directory
+- `use_socks5`: Use SOCKS5 proxy for this request (default: false)
 
 ### `control_torrent`
 Start, stop, or remove torrents.
 - `action`: "start", "stop", or "remove"
 - `torrent_ids`: Array of torrent IDs
 - `delete_data`: Whether to delete local data when removing (default: false)
+- `use_socks5`: Use SOCKS5 proxy for this request (default: false)
 
 ### `get_free_space`
 Check available disk space for downloads.
 - `path`: Optional directory path to check
+- `use_socks5`: Use SOCKS5 proxy for this request (default: false)
+
+### `list_torrents`  
+List all torrents with their status, progress, and download directories.
+- `use_socks5`: Use SOCKS5 proxy for this request (default: false)
+
+### `get_session_info`
+Get information about the Transmission daemon session, including version, settings, and statistics.
+- `use_socks5`: Use SOCKS5 proxy for this request (default: false)
 
 ## Usage Examples
 
 After setting up Claude Desktop, you can use these commands:
 
+**Direct connection (local network):**
 - "Show me all my torrents"
 - "Add this magnet link: magnet:?xt=urn:btih:..."
 - "Stop torrent ID 5"
-- "Remove torrent 3 and delete the files"
 - "How much free space do I have?"
-- "Get session information"
+
+**Via SOCKS5 proxy (remote access):**
+- "Use SOCKS5 to show me all my torrents"
+- "Use SOCKS5 proxy to add this magnet link: magnet:?xt=urn:btih:..."
+- "Use SOCKS5 to stop torrent ID 5"
+- "Use SOCKS5 to get free space"
 
 ## Network Setup
 
@@ -96,16 +103,14 @@ After setting up Claude Desktop, you can use these commands:
 Use when your laptop is on the same network as the Transmission server.
 
 ### SOCKS5 Proxy (Remote Access)
-Set up a SOCKS5 tunnel when away from home:
+Set up a SOCKS5 tunnel when away from home, then use `use_socks5: true` in your commands:
 
 ```bash
 # SSH tunnel with SOCKS5
 ssh -D 1080 -N user@your-home-server.com
-
-# Or use any SOCKS5 proxy service
 ```
 
-Then use the `transmission-socks5` configuration in Claude Desktop.
+Then tell Claude: *"Use SOCKS5 to add this magnet link..."*
 
 ## Troubleshooting
 

@@ -33,13 +33,16 @@ class TransmissionConfig(BaseModel):
 class TransmissionClient:
     """Simple Transmission RPC client"""
     
-    def __init__(self, config: TransmissionConfig):
+    def __init__(self, config: TransmissionConfig, use_socks5: Optional[bool] = None):
         self.config = config
         self.session_id: Optional[str] = None
         self.base_url = f"http://{config.host}:{config.port}/transmission/rpc"
         
+        # Use parameter override or config default
+        socks5_enabled = use_socks5 if use_socks5 is not None else config.use_socks5
+        
         # Setup HTTP client
-        if config.use_socks5:
+        if socks5_enabled:
             # Configure SOCKS5 proxy
             self.client = httpx.Client(
                 proxies=f"socks5://{config.socks5_host}:{config.socks5_port}",
@@ -155,8 +158,10 @@ config = TransmissionConfig(
     timeout=int(os.getenv("TRANSMISSION_TIMEOUT", "30"))
 )
 
-# Initialize client
-client = TransmissionClient(config)
+# Initialize client factory function
+def get_client(use_socks5: bool = False) -> TransmissionClient:
+    """Get client with optional SOCKS5 override"""
+    return TransmissionClient(config, use_socks5=use_socks5)
 
 
 @server.list_tools()
@@ -168,7 +173,12 @@ async def list_tools() -> List[Tool]:
             description="Get Transmission daemon session information",
             inputSchema={
                 "type": "object",
-                "properties": {},
+                "properties": {
+                    "use_socks5": {
+                        "type": "boolean",
+                        "description": "Use SOCKS5 proxy for this request (default: false)"
+                    }
+                },
                 "required": []
             }
         ),
@@ -177,7 +187,12 @@ async def list_tools() -> List[Tool]:
             description="List all torrents with their status",
             inputSchema={
                 "type": "object",
-                "properties": {},
+                "properties": {
+                    "use_socks5": {
+                        "type": "boolean",
+                        "description": "Use SOCKS5 proxy for this request (default: false)"
+                    }
+                },
                 "required": []
             }
         ),
@@ -194,6 +209,10 @@ async def list_tools() -> List[Tool]:
                     "download_dir": {
                         "type": "string", 
                         "description": "Optional download directory path"
+                    },
+                    "use_socks5": {
+                        "type": "boolean",
+                        "description": "Use SOCKS5 proxy for this request (default: false)"
                     }
                 },
                 "required": ["magnet_or_url"]
@@ -218,6 +237,10 @@ async def list_tools() -> List[Tool]:
                     "delete_data": {
                         "type": "boolean",
                         "description": "Delete local data when removing (default: false)"
+                    },
+                    "use_socks5": {
+                        "type": "boolean",
+                        "description": "Use SOCKS5 proxy for this request (default: false)"
                     }
                 },
                 "required": ["action", "torrent_ids"]
@@ -232,6 +255,10 @@ async def list_tools() -> List[Tool]:
                     "path": {
                         "type": "string",
                         "description": "Directory path to check (optional)"
+                    },
+                    "use_socks5": {
+                        "type": "boolean",
+                        "description": "Use SOCKS5 proxy for this request (default: false)"
                     }
                 },
                 "required": []
@@ -244,19 +271,25 @@ async def list_tools() -> List[Tool]:
 async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
     """Handle tool calls"""
     try:
+        # Extract use_socks5 parameter
+        use_socks5 = arguments.pop("use_socks5", False)
+        client = get_client(use_socks5)
+        
+        proxy_status = "via SOCKS5" if use_socks5 else "direct"
+        
         if name == "get_session_info":
             result = client.get_session_info()
             return [TextContent(
                 type="text",
-                text=f"Session Info:\n{json.dumps(result, indent=2)}"
+                text=f"Session Info ({proxy_status}):\n{json.dumps(result, indent=2)}"
             )]
         
         elif name == "list_torrents":
             torrents = client.list_torrents()
             if not torrents:
-                return [TextContent(type="text", text="No torrents found")]
+                return [TextContent(type="text", text=f"No torrents found ({proxy_status})")]
             
-            output = "Torrents:\n"
+            output = f"Torrents ({proxy_status}):\n"
             for torrent in torrents:
                 status_map = {0: "stopped", 1: "check-wait", 2: "check", 3: "download-wait", 
                             4: "download", 5: "seed-wait", 6: "seed", 7: "isolated"}
@@ -282,16 +315,16 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 torrent = result["torrent-added"]
                 return [TextContent(
                     type="text",
-                    text=f"Torrent added successfully!\nID: {torrent.get('id')}\nName: {torrent.get('name')}"
+                    text=f"Torrent added successfully ({proxy_status})!\nID: {torrent.get('id')}\nName: {torrent.get('name')}"
                 )]
             elif "torrent-duplicate" in result:
                 torrent = result["torrent-duplicate"]
                 return [TextContent(
                     type="text",
-                    text=f"Torrent already exists!\nID: {torrent.get('id')}\nName: {torrent.get('name')}"
+                    text=f"Torrent already exists ({proxy_status})!\nID: {torrent.get('id')}\nName: {torrent.get('name')}"
                 )]
             else:
-                return [TextContent(type="text", text="Torrent add result unclear")]
+                return [TextContent(type="text", text=f"Torrent add result unclear ({proxy_status})")]
         
         elif name == "control_torrent":
             action = arguments["action"]
@@ -300,14 +333,14 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             
             if action == "start":
                 client.start_torrent(torrent_ids)
-                return [TextContent(type="text", text=f"Started torrents: {torrent_ids}")]
+                return [TextContent(type="text", text=f"Started torrents ({proxy_status}): {torrent_ids}")]
             elif action == "stop":
                 client.stop_torrent(torrent_ids)
-                return [TextContent(type="text", text=f"Stopped torrents: {torrent_ids}")]
+                return [TextContent(type="text", text=f"Stopped torrents ({proxy_status}): {torrent_ids}")]
             elif action == "remove":
                 client.remove_torrent(torrent_ids, delete_data)
                 action_text = "removed with data" if delete_data else "removed (data kept)"
-                return [TextContent(type="text", text=f"Torrents {action_text}: {torrent_ids}")]
+                return [TextContent(type="text", text=f"Torrents {action_text} ({proxy_status}): {torrent_ids}")]
         
         elif name == "get_free_space":
             path = arguments.get("path")
@@ -319,14 +352,15 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             
             return [TextContent(
                 type="text", 
-                text=f"Free space at '{check_path}': {size_gb:.2f} GB ({size_bytes:,} bytes)"
+                text=f"Free space at '{check_path}' ({proxy_status}): {size_gb:.2f} GB ({size_bytes:,} bytes)"
             )]
         
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
     
     except Exception as e:
-        return [TextContent(type="text", text=f"Error: {str(e)}")]
+        proxy_status = "via SOCKS5" if arguments.get("use_socks5", False) else "direct"
+        return [TextContent(type="text", text=f"Error ({proxy_status}): {str(e)}")]
 
 
 def main():

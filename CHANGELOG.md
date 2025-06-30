@@ -79,5 +79,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Claude Desktop configuration now correctly uses virtual environment Python
-- Updated README with platform-specific Python paths (macOS/Linux vs Windows)
-- Added proper venv/bin/python and venv/Scripts/python.exe path examples
+- Updated README with proper venv/bin/python path examples
+- Removed any Windows references (macOS/Linux only)
+
+### Changed
+- **BREAKING**: Simplified to single MCP server configuration
+- SOCKS5 is now a runtime parameter (`use_socks5: true`) in tool calls
+- Removed duplicate server configs - one server handles both direct and proxy
+- All tools now accept optional `use_socks5` parameter
+- Responses indicate connection method used ("direct" or "via SOCKS5")
+
+### Improved
+- Cleaner Claude Desktop configuration with single server entry
+- Runtime connection switching without restart
+- More intuitive usage: "Use SOCKS5 to add torrent..." 
+- Better error messages showing connection method used
