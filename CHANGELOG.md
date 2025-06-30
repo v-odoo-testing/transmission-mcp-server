@@ -112,3 +112,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - No longer need to execute Python code for searching torrents
 - No longer need to execute Python code for getting torrent details
 - Cleaner separation between MCP tools and implementation
+
+### Added
+- **MCP Resources**: Three comprehensive reference guides now available in Claude Desktop
+  - **Magnet Link Format Guide**: Proper hash formats, validation rules, examples
+  - **Torrent Management Workflow**: Best practices, directory structure, status codes  
+  - **Connection Setup Guide**: Direct and SOCKS5 configuration, troubleshooting
+- **Input Validation**: Magnet link and torrent URL validation to catch errors early
+- **Enhanced Error Messages**: Clear feedback on invalid magnet links and URLs
+
+### Improved
+- **Knowledge Base**: Prevents fundamental errors (like fake hashes) through accessible documentation
+- **First-Time Success**: Resources provide the knowledge needed to get things right immediately
+- **Better UX**: No more wasted attempts due to invalid input formats
+
+### Developer Experience
+- Resources appear in Claude Desktop interface under "PROVIDED RESOURCES"
+- Eliminates need for trial-and-error with magnet link formats
+- Comprehensive troubleshooting and configuration guidance

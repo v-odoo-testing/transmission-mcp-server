@@ -9,13 +9,147 @@ Supports direct connection and SOCKS5 proxy.
 import json
 import os
 import sys
+import re
 from typing import Optional, Dict, Any, List
 import httpx
 import socks
 import socket
 from mcp.server import Server
-from mcp.types import Tool, TextContent
+from mcp.types import Tool, TextContent, Resource
 from pydantic import BaseModel
+
+
+# MCP Resources with reference information
+MAGNET_LINK_GUIDE = """# Magnet Link Format Reference
+
+## Valid Magnet Link Format
+```
+magnet:?xt=urn:btih:[HASH]&dn=[DISPLAY_NAME]&tr=[TRACKER_URL]
+```
+
+## Hash Requirements
+- **Hex Format**: Exactly 40 hexadecimal characters (0-9, A-F)
+  - Example: `A1B2C3D4E5F67890ABCDEF1234567890ABCDEF12`
+- **Base32 Format**: Exactly 32 base32 characters (A-Z, 2-7)
+  - Example: `MFRGG43FMZRW6Y3PNUXXE3DFMFRGG43F`
+
+## ❌ INVALID Examples
+- `THUNDERBOLTS2025` (not hex, not 40 chars)
+- `movie123` (too short, not hex)
+- `abcdef` (too short)
+
+## ✅ Valid Example
+```
+magnet:?xt=urn:btih:A1B2C3D4E5F67890ABCDEF1234567890ABCDEF12&dn=Movie.2024.1080p&tr=udp://tracker.example.com:1337/announce
+```
+
+## Common Tracker URLs
+- `udp://tracker.opentrackr.org:1337/announce`
+- `udp://tracker.leechers-paradise.org:6969/announce`
+- `udp://tracker.coppersurfer.tk:6969/announce`
+
+## Important Notes
+- NEVER generate fake hashes - always use real magnet links from torrent sites
+- Hash is derived from torrent content - cannot be made up
+- Popular sites: YTS, 1337x, The Pirate Bay, RARBG
+"""
+
+TORRENT_WORKFLOW_GUIDE = """# Torrent Management Workflow
+
+## Adding Torrents
+1. **Find Real Magnet Links**: Use actual torrent sites, never generate fake hashes
+2. **Validate Format**: Check hash is 40-char hex before adding
+3. **Set Directory**: Specify download location if different from default
+4. **Auto-start**: Torrents start automatically unless `start_torrent: false`
+
+## Searching and Managing
+- Use `search_torrents` to find existing torrents by name
+- Use `get_torrent_details` for comprehensive torrent information
+- Use `control_torrent` to start/stop/remove torrents
+
+## Directory Structure
+Common download directories:
+- Movies: `/media/lacie/Media/Movies`
+- TV Shows: `/media/lacie/Media/TV Shows/[ShowName]/Season X`
+- Downloads: `/media/lacie/Downloads`
+
+## Status Codes
+- **0**: stopped
+- **1**: check-wait  
+- **2**: checking
+- **3**: download-wait
+- **4**: downloading
+- **5**: seed-wait
+- **6**: seeding
+- **7**: isolated (no peers)
+
+## Best Practices
+- Always verify torrent is legitimate before adding
+- Use proper directory structure for organization
+- Monitor download progress with `get_torrent_details`
+- Remove completed torrents when no longer needed
+"""
+
+CONNECTION_GUIDE = """# Transmission Connection Guide
+
+## Connection Modes
+
+### Direct Connection (Local Network)
+- Default mode when `use_socks5: false`
+- Use when on same network as Transmission server
+- Fastest and most reliable
+
+### SOCKS5 Proxy (Remote Access)
+- Use when away from home network
+- Set `use_socks5: true` in tool calls
+- Requires SOCKS5 tunnel setup
+
+## Setting Up SOCKS5 Tunnel
+```bash
+# SSH tunnel with SOCKS5
+ssh -D 1080 -N user@your-home-server.com
+```
+
+## Environment Variables
+- `TRANSMISSION_HOST`: Server IP (default: 192.168.1.205)
+- `TRANSMISSION_PORT`: RPC port (default: 9091)
+- `TRANSMISSION_USERNAME`: Authentication username
+- `TRANSMISSION_PASSWORD`: Authentication password
+- `USE_SOCKS5`: Default proxy mode (true/false)
+- `SOCKS5_HOST`: Proxy host (default: 127.0.0.1)
+- `SOCKS5_PORT`: Proxy port (default: 1080)
+
+## Troubleshooting
+- **Connection refused**: Check if Transmission daemon is running
+- **Authentication failed**: Verify username/password
+- **Timeout**: Check network connectivity or try SOCKS5 mode
+- **409 Error**: Session ID expired (automatically handled)
+"""
+
+
+def validate_magnet_link(magnet_url: str) -> tuple[bool, str]:
+    """Validate magnet link format and hash"""
+    if not magnet_url.startswith('magnet:?xt=urn:btih:'):
+        return False, "Invalid magnet link format - must start with 'magnet:?xt=urn:btih:'"
+    
+    # Extract hash from magnet link (supports both 40-char hex and 32-char base32)
+    hex_match = re.search(r'urn:btih:([A-Fa-f0-9]{40})', magnet_url)
+    base32_match = re.search(r'urn:btih:([A-Za-z2-7]{32})', magnet_url)
+    
+    if not hex_match and not base32_match:
+        return False, "Invalid hash - must be 40-character hex (A-F0-9) or 32-character base32 (A-Z2-7)"
+    
+    return True, "Valid magnet link"
+
+
+def validate_torrent_url(url: str) -> tuple[bool, str]:
+    """Validate torrent URL format"""
+    if url.startswith('magnet:'):
+        return validate_magnet_link(url)
+    elif url.startswith(('http://', 'https://')) and url.endswith('.torrent'):
+        return True, "Valid torrent URL"
+    else:
+        return False, "Invalid URL - must be magnet link or HTTP(S) URL ending in .torrent"
 
 
 class TransmissionConfig(BaseModel):
@@ -113,8 +247,14 @@ class TransmissionClient:
         result = self._make_request("torrent-get", {"fields": fields})
         return result.get("arguments", {}).get("torrents", [])
     
-    def add_torrent(self, magnet_or_url: str, download_dir: Optional[str] = None, start_torrent: bool = True) -> Dict[str, Any]:
+    def add_torrent(self, magnet_or_url: str, download_dir: Optional[str] = None, start_torrent: bool = True, validate: bool = True) -> Dict[str, Any]:
         """Add torrent via magnet link or URL"""
+        # Validate input if requested
+        if validate:
+            is_valid, message = validate_torrent_url(magnet_or_url)
+            if not is_valid:
+                return {"error": f"Validation failed: {message}"}
+        
         args = {"filename": magnet_or_url}
         if download_dir:
             args["download-dir"] = download_dir
@@ -181,6 +321,44 @@ config = TransmissionConfig(
 def get_client(use_socks5: bool = False) -> TransmissionClient:
     """Get client with optional SOCKS5 override"""
     return TransmissionClient(config, use_socks5=use_socks5)
+
+
+@server.list_resources()
+async def list_resources() -> List[Resource]:
+    """List available resources"""
+    return [
+        Resource(
+            uri="transmission://magnet-guide",
+            name="Magnet Link Format Guide",
+            description="Complete guide for valid magnet link formats and hash requirements",
+            mimeType="text/plain"
+        ),
+        Resource(
+            uri="transmission://workflow-guide", 
+            name="Torrent Management Workflow",
+            description="Best practices for adding, managing, and organizing torrents",
+            mimeType="text/plain"
+        ),
+        Resource(
+            uri="transmission://connection-guide",
+            name="Connection Setup Guide", 
+            description="Guide for direct and SOCKS5 proxy connections to Transmission",
+            mimeType="text/plain"
+        )
+    ]
+
+
+@server.read_resource()
+async def read_resource(uri: str) -> str:
+    """Read resource content"""
+    if uri == "transmission://magnet-guide":
+        return MAGNET_LINK_GUIDE
+    elif uri == "transmission://workflow-guide":
+        return TORRENT_WORKFLOW_GUIDE
+    elif uri == "transmission://connection-guide":
+        return CONNECTION_GUIDE
+    else:
+        raise ValueError(f"Unknown resource: {uri}")
 
 
 @server.list_tools()
