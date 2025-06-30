@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "transmission": {
-      "command": "python3",
+      "command": "/Users/dgoo2308/git/transmission-mcp-server/venv/bin/python",
       "args": ["/Users/dgoo2308/git/transmission-mcp-server/src/server.py"],
       "env": {
         "TRANSMISSION_HOST": "192.168.1.205",
@@ -15,7 +15,7 @@
       }
     },
     "transmission-socks5": {
-      "command": "python3", 
+      "command": "/Users/dgoo2308/git/transmission-mcp-server/venv/bin/python", 
       "args": ["/Users/dgoo2308/git/transmission-mcp-server/src/server.py"],
       "env": {
         "TRANSMISSION_HOST": "192.168.1.205",

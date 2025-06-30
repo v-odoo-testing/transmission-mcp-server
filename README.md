@@ -20,12 +20,15 @@ A simple MCP server for controlling your Transmission torrent daemon. Supports b
    - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
    - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
    
-   Update the paths and credentials in the config:
+   **Important**: Update the paths to match your system and use the venv Python:
+   
+   - **macOS/Linux**: `/path/to/transmission-mcp-server/venv/bin/python`
+   - **Windows**: `C:\path\to\transmission-mcp-server\venv\Scripts\python.exe`
    ```json
    {
      "mcpServers": {
        "transmission": {
-         "command": "python3",
+         "command": "/path/to/transmission-mcp-server/venv/bin/python",
          "args": ["/path/to/transmission-mcp-server/src/server.py"],
          "env": {
            "TRANSMISSION_HOST": "192.168.1.205",

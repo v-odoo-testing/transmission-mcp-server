@@ -76,3 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - USE_SOCKS5: Enable/disable SOCKS5 proxy mode
 - SOCKS5_HOST/PORT: Proxy server configuration
 - TRANSMISSION_TIMEOUT: Request timeout settings
+
+### Fixed
+- Claude Desktop configuration now correctly uses virtual environment Python
+- Updated README with platform-specific Python paths (macOS/Linux vs Windows)
+- Added proper venv/bin/python and venv/Scripts/python.exe path examples
