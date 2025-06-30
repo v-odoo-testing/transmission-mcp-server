@@ -258,8 +258,9 @@ class TransmissionClient:
         args = {"filename": magnet_or_url}
         if download_dir:
             args["download-dir"] = download_dir
-        if not start_torrent:
-            args["paused"] = True
+        
+        # Always explicitly set paused parameter to override daemon defaults
+        args["paused"] = not start_torrent  # False when start_torrent=True, True when start_torrent=False
         
         result = self._make_request("torrent-add", args)
         return result.get("arguments", {})

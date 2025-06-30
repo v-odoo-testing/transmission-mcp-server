@@ -130,3 +130,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Resources appear in Claude Desktop interface under "PROVIDED RESOURCES"
 - Eliminates need for trial-and-error with magnet link formats
 - Comprehensive troubleshooting and configuration guidance
+
+### Fixed
+- **CRITICAL**: add_torrent now properly starts torrents by default
+  - Always explicitly sets `paused` parameter to override daemon defaults
+  - `start_torrent: true` (default) → `paused: false` (force start)
+  - `start_torrent: false` → `paused: true` (add paused)
+  - No longer relies on daemon's `start-added-torrents` setting
+  - Fixes issue where torrents were added but not started despite `start_torrent: true`
+
+### Technical Details
+- Previous logic only set `paused: true` when `start_torrent: false`
+- Left `start_torrent: true` cases to daemon default (which was `false`)
+- Now always explicitly controls torrent start behavior
+- Ensures consistent behavior regardless of daemon configuration
